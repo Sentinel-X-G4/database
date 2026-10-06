@@ -1,4 +1,4 @@
--- Schéma commun Sentinel-X (base unique, image backend_db).
+-- Schéma commun Sentinel-X (base unique, image database).
 -- Exécuté seulement à la création du volume : sur une base existante, appliquer les
 -- changements à la main (make db-sql F=... depuis main/).
 
