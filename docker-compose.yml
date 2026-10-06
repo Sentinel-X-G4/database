@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: g4-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: g4_epsi
+      POSTGRES_USER: epsi
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend        # réseau interne, aucun port publié sur l'hôte
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eisi -d eisi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+volumes:
+  pgdata:
+
+networks:
+  backend:
+    internal: true
