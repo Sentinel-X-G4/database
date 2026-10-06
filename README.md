@@ -1,98 +1,49 @@
-# BDD PostgreSQL – Projet G4 EPSI
+# BDD PostgreSQL – Sentinel-X (G4 EPSI)
 
-Base de données du projet, déployée en conteneur Docker. Elle est utilisée par le **Backend IoT (gestion + alertes)** et le **Backend API**.
+Base de données **unique** du projet. Elle est utilisée par le **service de détection**
+(`backend-iot-alerts`, qui écrit) et le **Backend API** (`backend-api`, qui lit et acquitte).
+
+Ce dépôt ne contient que l'image (`Dockerfile`) et le schéma (`db/init/`). Elle est lancée
+par le `docker-compose.yml` du dépôt [`main`](https://github.com/Sentinel-X-G4/main) :
+service `db`, conteneur `g4-db`, volume `pg-data`, réseau interne `sentinel-data`.
 
 ## Caractéristiques
 
 | Élément | Valeur |
 |---|---|
-| Image | `postgres:16-alpine` |
-| Conteneur | `g4-db` |
+| Image | `timescale/timescaledb:latest-pg16` + schéma intégré |
 | Nom d'hôte (réseau Docker) | `db` |
 | Port | `5432` (non publié sur l'hôte) |
-| Base | `g4_epsi` |
-| Utilisateur | `epsi` |
-| Mot de passe | fichier `secrets/db_password.txt` (non versionné) |
-| Réseau | `backend` (`internal: true`, sans accès externe) |
-| Données | volume Docker `pgdata` |
+| Base / utilisateur / mot de passe | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` du `.env` de `main` |
+| Réseau | `sentinel-data` (`internal: true`, sans accès externe) |
+| Données | volume Docker `pg-data` |
 
-## Arborescence
+## Schéma (`db/init/`, exécuté uniquement au 1er démarrage, volume vide)
 
-```
-g4/
-├── docker-compose.yml
-├── db/
-│   └── init/
-│       └── 01_schema.sql      # exécuté uniquement au 1er démarrage (volume vide)
-└── secrets/
-    └── db_password.txt        # à créer, ne jamais commiter
-```
-
-## Démarrage
-
-```bash
-# 1. Créer le mot de passe (sans retour à la ligne)
-openssl rand -base64 24 | tr -d '\n' > secrets/db_password.txt
-chmod 600 secrets/db_password.txt
-
-# 2. Lancer
-docker compose up -d
-
-# 3. Vérifier
-docker compose ps                                        # état "healthy"
-docker exec -it g4-db psql -U epsi -d g4_epsi -c '\dt'   # liste des tables
-```
-
-## Schéma
-
-| Table | Rôle |
+| Fichier | Contenu |
 |---|---|
-| `devices` | Objets IoT (nom, type, topic MQTT, dernière activité) |
-| `measurements` | Mesures horodatées par objet (index `device_id, ts DESC`) |
-| `alerts` | Alertes (gravité `info`/`warning`/`critical`, acquittement) |
-| `users` | Comptes du dashboard (hash du mot de passe, rôle) |
+| `01_schema.sql` | `devices`, `measurements`, `alerts`, `commands`, `users` |
+| `02_detection.sql` | schéma `detection` : mesures brutes, caméra, features, prédictions, sessions (hypertables) |
+| `03_notify.sql` | triggers `NOTIFY` (`sentinel_alerts`, `sentinel_devices`) écoutés par backend-api |
 
-Détail complet dans `db/init/01_schema.sql`.
+| Table | Écrite par | Lue par |
+|---|---|---|
+| `alerts` | détection (activation feu / gaz / présence, alertes ESP) | backend-api (liste, stats, acquittement) |
+| `detection.predictions` | détection (changement d'état + heartbeat 10 s) | backend-api (état des appareils) |
+| `detection.sensor_readings`, `camera_events`, `feature_windows`, `recording_sessions` | détection | détection (jeu d'entraînement) |
+| `devices`, `measurements`, `commands`, `users` | — (prévues : objets, comptes du dashboard) | — |
 
-## Connexion depuis un autre service
+`02_detection.sql` doit rester aligné sur `detection_service/storage/tables.py`, et
+`alerts` sur `backend-api/db.js` : aucun service ne crée de table.
 
-Le service doit rejoindre le réseau `backend` dans le compose :
-
-```yaml
-services:
-  api:
-    networks: [backend]
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: g4_epsi
-      DB_USER: epsi
-      DB_PASSWORD_FILE: /run/secrets/db_password
-```
-
-Chaîne de connexion type : `postgresql://epsi:<mot_de_passe>@db:5432/g4_epsi`
-
-## Exploitation
+## Exploitation (depuis `main/`)
 
 ```bash
-docker compose logs -f db                                # logs
-docker exec -it g4-db psql -U epsi -d g4_epsi            # console SQL
-
-# Sauvegarde
-docker exec g4-db pg_dump -U epsi g4_epsi > backup_$(date +%F).sql
-
-# Restauration
-docker exec -i g4-db psql -U epsi -d g4_epsi < backup_AAAA-MM-JJ.sql
-
-# Repartir de zéro (SUPPRIME les données, rejoue 01_schema.sql)
-docker compose down -v && docker compose up -d
+make db                      # console SQL
+make db-sql F=migration.sql  # appliquer un changement sur une base existante
+make db-backup               # sauvegarde dans backups/
+make db-reset                # SUPPRIME les données et rejoue db/init (confirmation)
 ```
 
-## Remarques
-
-- Aucun port n'est publié : la BDD n'est joignable que depuis les conteneurs du réseau `backend`.
-- Modifier `01_schema.sql` n'a d'effet qu'après recréation du volume (`down -v`).
-- Pour du débogage depuis l'hôte, publier temporairement `127.0.0.1:5432:5432` et retirer `internal: true`, puis revenir à la configuration initiale.
+Modifier `db/init/` n'a d'effet qu'à la création du volume : sur une base existante,
+écrire le `ALTER` correspondant et l'appliquer avec `make db-sql`.
