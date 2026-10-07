@@ -30,6 +30,7 @@ service `db`, conteneur `g4-db`, volume `pg-data`, réseau interne `sentinel-dat
 |---|---|---|
 | `alerts` | détection (activation feu / gaz / présence, alertes ESP) | backend-api (liste, stats, acquittement) |
 | `detection.predictions` | détection (changement d'état + heartbeat 10 s) | backend-api (état des appareils) |
+| `detection.camera_state` | détection (dernier état de chaque caméra : changement + toutes les 10 s) | backend-api (`/overview`, `/camera`) |
 | `detection.sensor_readings`, `camera_events`, `feature_windows`, `recording_sessions` | détection | détection (jeu d'entraînement) |
 | `devices`, `measurements`, `commands`, `users` | — (prévues : objets, comptes du dashboard) | — |
 
@@ -46,4 +47,4 @@ make db-reset                # SUPPRIME les données et rejoue db/init (confirma
 ```
 
 Modifier `db/init/` n'a d'effet qu'à la création du volume : sur une base existante,
-écrire le `ALTER` correspondant et l'appliquer avec `make db-sql`.
+écrire le `ALTER` correspondant dans `db/migrations/` et l'appliquer avec `make db-sql`.

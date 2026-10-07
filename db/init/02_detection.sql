@@ -32,6 +32,18 @@ CREATE TABLE detection.camera_events (
 SELECT create_hypertable('detection.camera_events', 'received_at');
 CREATE INDEX ix_camera_events_device_received ON detection.camera_events (device_id, received_at DESC);
 
+-- Dernier état de chaque caméra (sentinelx/{device_id}/camera), une ligne par device_id : écrit
+-- à chaque changement et au moins toutes les 10 s (updated_at = fraîcheur), lu par backend-api
+CREATE TABLE IF NOT EXISTS detection.camera_state (
+    device_id  TEXT        PRIMARY KEY,
+    updated_at TIMESTAMPTZ NOT NULL,
+    device_ts  BIGINT,
+    person     BOOLEAN     NOT NULL,
+    identity   TEXT,                       -- none | authorized | unknown (null : reconnaissance désactivée)
+    names      JSONB       NOT NULL,       -- personnes autorisées reconnues
+    faces      JSONB       NOT NULL        -- visages vus : [{"name": "Alice" | null}]
+);
+
 -- Features par fenêtre (entrée du modèle) ; label/session_id = jeu d'entraînement
 CREATE TABLE detection.feature_windows (
     device_id          TEXT NOT NULL,
