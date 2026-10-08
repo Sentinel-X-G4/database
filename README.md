@@ -24,7 +24,7 @@ service `db`, conteneur `g4-db`, volume `pg-data`, réseau interne `sentinel-dat
 |---|---|
 | `01_schema.sql` | `devices`, `measurements`, `alerts`, `commands`, `users` |
 | `02_detection.sql` | schéma `detection` : mesures brutes, caméra, features, prédictions, sessions (hypertables) |
-| `03_notify.sql` | triggers `NOTIFY` (`sentinel_alerts`, `sentinel_devices`) écoutés par backend-api |
+| `03_notify.sql` | triggers `NOTIFY` (`sentinel_alerts`, `sentinel_devices`) ; plus écoutés : backend-api interroge la base |
 
 | Table | Écrite par | Lue par |
 |---|---|---|
@@ -32,7 +32,8 @@ service `db`, conteneur `g4-db`, volume `pg-data`, réseau interne `sentinel-dat
 | `detection.predictions` | détection (changement d'état + heartbeat 10 s) | backend-api (état des appareils) |
 | `detection.camera_state` | détection (dernier état de chaque caméra : changement + toutes les 10 s) | backend-api (`/overview`, `/camera`) |
 | `detection.sensor_readings`, `camera_events`, `feature_windows`, `recording_sessions` | détection | détection (jeu d'entraînement) |
-| `devices`, `measurements`, `commands`, `users` | — (prévues : objets, comptes du dashboard) | — |
+| `users` | backend-api (comptes du dashboard) | backend-api (connexion, rôles) |
+| `devices`, `measurements`, `commands` | — (prévues, non utilisées) | — |
 
 `02_detection.sql` doit rester aligné sur `detection_service/storage/tables.py`, et
 `alerts` sur `backend-api/db.js` : aucun service ne crée de table.
